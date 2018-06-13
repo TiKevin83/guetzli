@@ -58,7 +58,39 @@ ButteraugliComparator::ButteraugliComparator(const int width, const int height,
       rgb_orig_(*rgb),
       comparator_(LinearRgb(width_, height_, *rgb), 1.0),
       distance_(0.0),
-      stats_(stats) {}
+      stats_(stats),
+	  distmap_(width_ * height_) {
+	std::vector<butteraugli::ImageF> rgb_linear_pregamma =
+		LinearRgb(width, height, *rgb);
+	const int block_w = (width_ + 7) / 8;
+	const int block_h = (height_ + 7) / 8;
+	const int nblocks = block_w * block_h;
+	per_block_pregamma_.resize(nblocks);
+	for (int block_y = 0, bx = 0; block_y < block_h; ++block_y) {
+		for (int block_x = 0; block_x < block_w; ++block_x, ++bx) {
+			per_block_pregamma_[bx].resize(3, std::vector<float>(kDCTBlockSize));
+			for (int iy = 0, i = 0; iy < 8; ++iy) {
+				for (int ix = 0; ix < 8; ++ix, ++i) {
+					int x = std::min(8 * block_x + ix, width_ - 1);
+					int y = std::min(8 * block_y + iy, height_ - 1);
+					for (int c = 0; c < 3; ++c) {
+						const float* const BUTTERAUGLI_RESTRICT row_linear =
+							rgb_linear_pregamma[c].Row(y);
+						per_block_pregamma_[bx][c][i] = row_linear[x];
+					}
+				}
+			}
+			per_block_pregamma_[bx] =
+				butteraugli::PackedFromPlanes(butteraugli::OpsinDynamicsImage(
+					butteraugli::PlanesFromPacked(8, 8, per_block_pregamma_[bx])));
+		}
+	}
+	rgb_linear_pregamma =
+		butteraugli::OpsinDynamicsImage(rgb_linear_pregamma);
+	std::vector<ImageF> dummy;
+	butteraugli::Mask(rgb_linear_pregamma, rgb_linear_pregamma,
+		&mask_xyz_, &dummy);
+}
 
 void ButteraugliComparator::Compare(const OutputImage& img) {
   std::vector<ImageF> rgb0 =
