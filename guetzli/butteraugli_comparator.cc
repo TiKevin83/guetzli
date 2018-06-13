@@ -56,7 +56,7 @@ ButteraugliComparator::ButteraugliComparator(const int width, const int height,
       height_(height),
       target_distance_(target_distance),
       rgb_orig_(*rgb),
-      comparator_(LinearRgb(width_, height_, *rgb)),
+      comparator_(LinearRgb(width_, height_, *rgb), 1.0),
       distance_(0.0),
       stats_(stats) {}
 
