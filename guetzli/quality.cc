@@ -76,12 +76,7 @@ const double kScoreForQuality[] = {
 }  // namespace
 
 double ButteraugliScoreForQuality(double quality) {
-  if (quality < kLowestQuality) quality = kLowestQuality;
-  if (quality > kHighestQuality) quality = kHighestQuality;
-  int index = static_cast<int>(quality);
-  double mix = quality - index;
-  return kScoreForQuality[index - kLowestQuality] * (1 - mix) +
-      kScoreForQuality[index - kLowestQuality + 1] * mix;
+	return quality;
 }
 
 }  // namespace guetzli

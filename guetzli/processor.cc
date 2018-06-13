@@ -797,13 +797,6 @@ bool Processor::ProcessJpegData(const Params& params, const JPEGData& jpg_in,
   final_output_ = out;
   stats_ = stats;
 
-  if (params.butteraugli_target > 2.0f) {
-    fprintf(stderr,
-            "Guetzli should be called with quality >= 84, otherwise the\n"
-            "output will have noticeable artifacts. If you want to\n"
-            "proceed anyway, please edit the source code.\n");
-    return false;
-  }
   if (jpg_in.components.size() != 3 || !HasYCbCrColorSpace(jpg_in)) {
     fprintf(stderr, "Only YUV color space input jpeg is supported\n");
     return false;
