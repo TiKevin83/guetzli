@@ -31,7 +31,8 @@
 
 namespace {
 
-constexpr int kDefaultJPEGQuality = 1.1;
+constexpr int kDefaultJPEGQuality = .5;
+bool findQuality = true;
 
 // An upper estimate of memory usage of Guetzli. The bound is
 // max(kLowerMemusaeMB * 1<<20, pixel_count * kBytesPerPixel)
@@ -247,6 +248,7 @@ int main(int argc, char** argv) {
       if (opt_idx >= argc)
         Usage();
       quality = atof(argv[opt_idx]);
+	  findQuality = false;
     } else if (!strcmp(argv[opt_idx], "--memlimit")) {
       opt_idx++;
       if (opt_idx >= argc)
@@ -268,7 +270,18 @@ int main(int argc, char** argv) {
   }
 
   std::string in_data = ReadFileOrDie(argv[opt_idx]);
-  std::string out_data;
+  std::string out_data1;
+  std::string out_data2;
+  std::string out_data3;
+  std::string out_data4;
+  float targetQuality1 = .5;
+  float targetQuality2 = 1.5;
+  float targetQuality3 = 2.5;
+  float targetQuality4 = 2.5;
+  float efficiency1;
+  float efficiency2;
+  float efficiency3;
+  float efficiency4;
 
   guetzli::Params params;
   params.butteraugli_target = static_cast<float>(
@@ -298,10 +311,132 @@ int main(int argc, char** argv) {
       fprintf(stderr, "Memory limit would be exceeded. Failing.\n");
       return 1;
     }
-    if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data)) {
+    if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data1)) {
       fprintf(stderr, "Guetzli processing failed\n");
       return 1;
     }
+	out_data2 = out_data1;
+	if (findQuality == true) {
+		efficiency1 = out_data1.length() * targetQuality1;
+		params.butteraugli_target = targetQuality2;
+		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data2)) {
+			fprintf(stderr, "Guetzli processing failed\n");
+			return 1;
+		}
+		efficiency2 = out_data2.length() * targetQuality2;
+		params.butteraugli_target = targetQuality3;
+		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data3)) {
+			fprintf(stderr, "Guetzli processing failed\n");
+			return 1;
+		}
+		efficiency3 = out_data3.length() * targetQuality3;
+		for (int i = 0; i < 6; i++) {
+			if (efficiency1 < efficiency2) {
+				targetQuality4 = targetQuality1 /2;
+				params.butteraugli_target = targetQuality4;
+				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+					fprintf(stderr, "Guetzli processing failed\n");
+					return 1;
+				}
+				efficiency4 = out_data4.length() * targetQuality4;
+				if (efficiency4 < efficiency1) {
+					targetQuality2 = targetQuality1;
+					efficiency2 = efficiency1;
+					out_data2 = out_data1;
+					targetQuality1 = targetQuality4;
+					efficiency1 = efficiency4;
+					out_data1 = out_data4;
+				}
+				else {
+					targetQuality3 = targetQuality2;
+					efficiency3 = efficiency2;
+					out_data3 = out_data2;
+					targetQuality2 = targetQuality1;
+					efficiency2 = efficiency1;
+					out_data2 = out_data1;
+					targetQuality1 = targetQuality4;
+					efficiency1 = efficiency4;
+					out_data1 = out_data4;
+				}
+			}
+			else if (efficiency1 > efficiency2 && efficiency2 < efficiency3) {
+				if (efficiency1 < efficiency3) {
+					targetQuality4 = (targetQuality1 + targetQuality2) / 2;
+					params.butteraugli_target = targetQuality4;
+					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+						fprintf(stderr, "Guetzli processing failed\n");
+						return 1;
+					}
+					efficiency4 = out_data4.length() * targetQuality4;
+					if (efficiency4 < efficiency2) {
+						targetQuality3 = targetQuality2;
+						efficiency3 = efficiency2;
+						out_data3 = out_data2;
+						targetQuality2 = targetQuality4;
+						efficiency2 = efficiency4;
+						out_data2 = out_data4;
+					}
+					else {
+						targetQuality1 = targetQuality4;
+						efficiency1 = efficiency4;
+						out_data1 = out_data4;
+					} 
+				}
+				else {
+					targetQuality4 = (targetQuality2 + targetQuality3) / 2;
+					params.butteraugli_target = targetQuality4;
+					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+						fprintf(stderr, "Guetzli processing failed\n");
+						return 1;
+					}
+					efficiency4 = out_data4.length() * targetQuality4;
+					if (efficiency4 < efficiency2) {
+						targetQuality1 = targetQuality2;
+						efficiency1 = efficiency2;
+						out_data1 = out_data2;
+						targetQuality2 = targetQuality4;
+						efficiency2 = efficiency4;
+						out_data2 = out_data4;
+					}
+					else {
+						targetQuality3 = targetQuality4;
+						efficiency3 = efficiency4;
+						out_data3 = out_data4;
+					}
+				}
+			}
+			else {
+				targetQuality4 = targetQuality3 + 1;
+				params.butteraugli_target = targetQuality4;
+				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+					fprintf(stderr, "Guetzli processing failed\n");
+					return 1;
+				}
+				efficiency4 = out_data4.length() * targetQuality4;
+				if (efficiency4 < efficiency3) {
+					targetQuality2 = targetQuality3;
+					efficiency2 = efficiency3;
+					out_data2 = out_data3;
+					targetQuality3 = targetQuality4;
+					efficiency3 = efficiency4;
+					out_data3 = out_data4;
+				}
+				else {
+					targetQuality1 = targetQuality2;
+					efficiency1 = efficiency2;
+					out_data1 = out_data2;
+					targetQuality2 = targetQuality3;
+					efficiency2 = efficiency3;
+					out_data2 = out_data3;
+					targetQuality3 = targetQuality4;
+					efficiency3 = efficiency4;
+					out_data3 = out_data4;
+				}
+			}
+			fprintf(stderr, "Current Optimal Quality: ");
+			printf("%g\n", targetQuality2);
+		}
+	}
   } else {
     guetzli::JPEGData jpg_header;
     if (!guetzli::ReadJpeg(in_data, guetzli::JPEG_READ_HEADER, &jpg_header)) {
@@ -315,12 +450,11 @@ int main(int argc, char** argv) {
       fprintf(stderr, "Memory limit would be exceeded. Failing.\n");
       return 1;
     }
-    if (!guetzli::Process(params, &stats, in_data, &out_data)) {
+    if (!guetzli::Process(params, &stats, in_data, &out_data2)) {
       fprintf(stderr, "Guetzli processing failed\n");
       return 1;
     }
   }
-
-  WriteFileOrDie(argv[opt_idx + 1], out_data);
+  WriteFileOrDie(argv[opt_idx + 1], out_data2);
   return 0;
 }
