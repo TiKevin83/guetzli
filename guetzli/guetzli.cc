@@ -22,6 +22,7 @@
 #include <string>
 #include <sstream>
 #include <string.h>
+#include <math.h>
 #include "png.h"
 #include "guetzli/jpeg_data.h"
 #include "guetzli/jpeg_data_reader.h"
@@ -31,7 +32,7 @@
 
 namespace {
 
-constexpr int kDefaultJPEGQuality = .5;
+constexpr double defaultButteraugliDistance = 1;
 bool findQuality = true;
 
 // An upper estimate of memory usage of Guetzli. The bound is
@@ -221,10 +222,10 @@ void Usage() {
       "Flags:\n"
       "  --verbose    - Print a verbose trace of all attempts to standard output.\n"
       "  --quality Q  - Visual quality to aim for, expressed as a JPEG quality value.\n"
-      "                 Default value is %d.\n"
+      "                 Default value is %g.\n"
       "  --memlimit M - Memory limit in MB. Guetzli will fail if unable to stay under\n"
       "                 the limit. Default limit is %d MB.\n"
-      "  --nomemlimit - Do not limit memory usage.\n", kDefaultJPEGQuality, kDefaultMemlimitMB);
+      "  --nomemlimit - Do not limit memory usage.\n", defaultButteraugliDistance, kDefaultMemlimitMB);
   exit(1);
 }
 
@@ -234,7 +235,7 @@ int main(int argc, char** argv) {
   std::set_terminate(TerminateHandler);
 
   int verbose = 0;
-  double quality = kDefaultJPEGQuality;
+  double quality = defaultButteraugliDistance;
   int memlimit_mb = kDefaultMemlimitMB;
 
   int opt_idx = 1;
@@ -270,18 +271,18 @@ int main(int argc, char** argv) {
   }
 
   std::string in_data = ReadFileOrDie(argv[opt_idx]);
-  std::string out_data1;
-  std::string out_data2;
-  std::string out_data3;
-  std::string out_data4;
-  float targetQuality1 = .5;
-  float targetQuality2 = 1.5;
-  float targetQuality3 = 2.5;
-  float targetQuality4 = 2.5;
-  float efficiency1;
-  float efficiency2;
-  float efficiency3;
-  float efficiency4;
+  std::string lowerBoundOutData;
+  std::string currentOutData;
+  std::string upperBoundOutData;
+  std::string nextOutData;
+  float lowTargetQuality = 1;
+  float currentTargetQuality = 1.5;
+  float upperTargetQuality = 2;
+  float nextTargetQuality = 1.5;
+  float lowerBoundEfficiency;
+  float currentEfficiency;
+  float upperBoundEfficiency;
+  float nextEfficiency;
 
   guetzli::Params params;
   params.butteraugli_target = static_cast<float>(
@@ -311,130 +312,103 @@ int main(int argc, char** argv) {
       fprintf(stderr, "Memory limit would be exceeded. Failing.\n");
       return 1;
     }
-    if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data1)) {
+    if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &lowerBoundOutData)) {
       fprintf(stderr, "Guetzli processing failed\n");
       return 1;
     }
-	out_data2 = out_data1;
+	currentOutData = lowerBoundOutData;
 	if (findQuality == true) {
-		efficiency1 = out_data1.length() * targetQuality1;
-		params.butteraugli_target = targetQuality2;
-		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data2)) {
+		lowerBoundEfficiency = lowerBoundOutData.length() * lowTargetQuality;
+		params.butteraugli_target = currentTargetQuality;
+		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &currentOutData)) {
 			fprintf(stderr, "Guetzli processing failed\n");
 			return 1;
 		}
-		efficiency2 = out_data2.length() * targetQuality2;
-		params.butteraugli_target = targetQuality3;
-		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data3)) {
+		currentEfficiency = currentOutData.length() * currentTargetQuality;
+		params.butteraugli_target = upperTargetQuality;
+		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &upperBoundOutData)) {
 			fprintf(stderr, "Guetzli processing failed\n");
 			return 1;
 		}
-		efficiency3 = out_data3.length() * targetQuality3;
-		for (int i = 0; i < 6; i++) {
-			if (efficiency1 < efficiency2) {
-				targetQuality4 = targetQuality1 /2;
-				params.butteraugli_target = targetQuality4;
-				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+		upperBoundEfficiency = upperBoundOutData.length() * upperTargetQuality;
+		for (int i = 0; i < 7; i++) {
+			if (lowerBoundEfficiency < currentEfficiency) {
+				nextTargetQuality = (lowTargetQuality + currentTargetQuality) / 2;
+				params.butteraugli_target = nextTargetQuality;
+				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 					fprintf(stderr, "Guetzli processing failed\n");
 					return 1;
 				}
-				efficiency4 = out_data4.length() * targetQuality4;
-				if (efficiency4 < efficiency1) {
-					targetQuality2 = targetQuality1;
-					efficiency2 = efficiency1;
-					out_data2 = out_data1;
-					targetQuality1 = targetQuality4;
-					efficiency1 = efficiency4;
-					out_data1 = out_data4;
-				}
-				else {
-					targetQuality3 = targetQuality2;
-					efficiency3 = efficiency2;
-					out_data3 = out_data2;
-					targetQuality2 = targetQuality1;
-					efficiency2 = efficiency1;
-					out_data2 = out_data1;
-					targetQuality1 = targetQuality4;
-					efficiency1 = efficiency4;
-					out_data1 = out_data4;
-				}
+				nextEfficiency = nextOutData.length() * nextTargetQuality;
+				upperTargetQuality = currentTargetQuality;
+				upperBoundEfficiency = currentEfficiency;
+				upperBoundOutData = currentOutData;
+				currentTargetQuality = nextTargetQuality;
+				currentEfficiency = nextEfficiency;
+				currentOutData = nextOutData;
 			}
-			else if (efficiency1 > efficiency2 && efficiency2 < efficiency3) {
-				if (efficiency1 < efficiency3) {
-					targetQuality4 = (targetQuality1 + targetQuality2) / 2;
-					params.butteraugli_target = targetQuality4;
-					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+			else if (lowerBoundEfficiency > currentEfficiency && currentEfficiency < upperBoundEfficiency) {
+					nextTargetQuality = (lowTargetQuality + currentTargetQuality) / 2;
+					params.butteraugli_target = nextTargetQuality;
+					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 						fprintf(stderr, "Guetzli processing failed\n");
 						return 1;
 					}
-					efficiency4 = out_data4.length() * targetQuality4;
-					if (efficiency4 < efficiency2) {
-						targetQuality3 = targetQuality2;
-						efficiency3 = efficiency2;
-						out_data3 = out_data2;
-						targetQuality2 = targetQuality4;
-						efficiency2 = efficiency4;
-						out_data2 = out_data4;
+					nextEfficiency = nextOutData.length() * nextTargetQuality;
+					if (nextEfficiency < currentEfficiency) {
+						upperTargetQuality = currentTargetQuality;
+						upperBoundEfficiency = currentEfficiency;
+						upperBoundOutData = currentOutData;
+						currentTargetQuality = nextTargetQuality;
+						currentEfficiency = nextEfficiency;
+						currentOutData = nextOutData;
 					}
 					else {
-						targetQuality1 = targetQuality4;
-						efficiency1 = efficiency4;
-						out_data1 = out_data4;
-					} 
-				}
-				else {
-					targetQuality4 = (targetQuality2 + targetQuality3) / 2;
-					params.butteraugli_target = targetQuality4;
-					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+					lowTargetQuality = nextTargetQuality;
+					lowerBoundEfficiency = nextEfficiency;
+					lowerBoundOutData = nextOutData;
+					nextTargetQuality = (currentTargetQuality + upperTargetQuality) / 2;
+					params.butteraugli_target = nextTargetQuality;
+					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 						fprintf(stderr, "Guetzli processing failed\n");
 						return 1;
 					}
-					efficiency4 = out_data4.length() * targetQuality4;
-					if (efficiency4 < efficiency2) {
-						targetQuality1 = targetQuality2;
-						efficiency1 = efficiency2;
-						out_data1 = out_data2;
-						targetQuality2 = targetQuality4;
-						efficiency2 = efficiency4;
-						out_data2 = out_data4;
+					nextEfficiency = nextOutData.length() * nextTargetQuality;
+					if (nextEfficiency < currentEfficiency) {
+						lowTargetQuality = currentTargetQuality;
+						lowerBoundEfficiency = currentEfficiency;
+						lowerBoundOutData = currentOutData;
+						currentTargetQuality = nextTargetQuality;
+						currentEfficiency = nextEfficiency;
+						currentOutData = nextOutData;
 					}
 					else {
-						targetQuality3 = targetQuality4;
-						efficiency3 = efficiency4;
-						out_data3 = out_data4;
+						upperTargetQuality = nextTargetQuality;
+						upperBoundEfficiency = nextEfficiency;
+						upperBoundOutData = nextOutData;
 					}
 				}
 			}
 			else {
-				targetQuality4 = targetQuality3 + 1;
-				params.butteraugli_target = targetQuality4;
-				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &out_data4)) {
+				nextTargetQuality = upperTargetQuality + (float).5;
+				params.butteraugli_target = nextTargetQuality;
+				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 					fprintf(stderr, "Guetzli processing failed\n");
 					return 1;
 				}
-				efficiency4 = out_data4.length() * targetQuality4;
-				if (efficiency4 < efficiency3) {
-					targetQuality2 = targetQuality3;
-					efficiency2 = efficiency3;
-					out_data2 = out_data3;
-					targetQuality3 = targetQuality4;
-					efficiency3 = efficiency4;
-					out_data3 = out_data4;
-				}
-				else {
-					targetQuality1 = targetQuality2;
-					efficiency1 = efficiency2;
-					out_data1 = out_data2;
-					targetQuality2 = targetQuality3;
-					efficiency2 = efficiency3;
-					out_data2 = out_data3;
-					targetQuality3 = targetQuality4;
-					efficiency3 = efficiency4;
-					out_data3 = out_data4;
-				}
+				nextEfficiency = nextOutData.length() * nextTargetQuality;
+				lowTargetQuality = currentTargetQuality;
+				lowerBoundEfficiency = currentEfficiency;
+				lowerBoundOutData = currentOutData;
+				currentTargetQuality = upperTargetQuality;
+				currentEfficiency = upperBoundEfficiency;
+				currentOutData = upperBoundOutData;
+				upperTargetQuality = nextTargetQuality;
+				upperBoundEfficiency = nextEfficiency;
+				upperBoundOutData = nextOutData;
 			}
 			fprintf(stderr, "Current Optimal Quality: ");
-			printf("%g\n", targetQuality2);
+			fprintf(stderr,"%g\n", currentTargetQuality);
 		}
 	}
   } else {
@@ -450,11 +424,11 @@ int main(int argc, char** argv) {
       fprintf(stderr, "Memory limit would be exceeded. Failing.\n");
       return 1;
     }
-    if (!guetzli::Process(params, &stats, in_data, &out_data2)) {
+    if (!guetzli::Process(params, &stats, in_data, &currentOutData)) {
       fprintf(stderr, "Guetzli processing failed\n");
       return 1;
     }
   }
-  WriteFileOrDie(argv[opt_idx + 1], out_data2);
+  WriteFileOrDie(argv[opt_idx + 1], currentOutData);
   return 0;
 }
