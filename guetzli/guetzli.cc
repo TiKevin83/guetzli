@@ -32,7 +32,7 @@
 
 namespace {
 
-constexpr double defaultButteraugliDistance = 1;
+constexpr double defaultButteraugliDistance = .6;
 bool findQuality = true;
 
 // An upper estimate of memory usage of Guetzli. The bound is
@@ -275,10 +275,10 @@ int main(int argc, char** argv) {
   std::string currentOutData;
   std::string upperBoundOutData;
   std::string nextOutData;
-  float lowTargetQuality = 1;
-  float currentTargetQuality = 1.5;
+  float lowTargetQuality = .6;
+  float currentTargetQuality = 1.3;
   float upperTargetQuality = 2;
-  float nextTargetQuality = 1.5;
+  float nextTargetQuality = 1.3;
   float lowerBoundEfficiency;
   float currentEfficiency;
   float upperBoundEfficiency;
@@ -318,28 +318,34 @@ int main(int argc, char** argv) {
     }
 	currentOutData = lowerBoundOutData;
 	if (findQuality == true) {
-		lowerBoundEfficiency = lowerBoundOutData.length() * lowTargetQuality;
+		lowerBoundEfficiency = lowerBoundOutData.length() * pow(2, lowTargetQuality);
+		fprintf(stderr, "Searching at Quality: ");
+		fprintf(stderr, "%g\n", currentTargetQuality);
 		params.butteraugli_target = currentTargetQuality;
 		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &currentOutData)) {
 			fprintf(stderr, "Guetzli processing failed\n");
 			return 1;
 		}
-		currentEfficiency = currentOutData.length() * currentTargetQuality;
+		currentEfficiency = currentOutData.length() * pow(2, currentTargetQuality);
+		fprintf(stderr, "Searching at Quality: ");
+		fprintf(stderr, "%g\n", upperTargetQuality);
 		params.butteraugli_target = upperTargetQuality;
 		if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &upperBoundOutData)) {
 			fprintf(stderr, "Guetzli processing failed\n");
 			return 1;
 		}
-		upperBoundEfficiency = upperBoundOutData.length() * upperTargetQuality;
-		for (int i = 0; i < 7; i++) {
+		upperBoundEfficiency = upperBoundOutData.length() * pow(2, upperTargetQuality);
+		for (int i = 0; i < 4; i++) {
 			if (lowerBoundEfficiency < currentEfficiency) {
 				nextTargetQuality = (lowTargetQuality + currentTargetQuality) / 2;
+				fprintf(stderr, "Searching at Quality: ");
+				fprintf(stderr, "%g\n", nextTargetQuality);
 				params.butteraugli_target = nextTargetQuality;
 				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 					fprintf(stderr, "Guetzli processing failed\n");
 					return 1;
 				}
-				nextEfficiency = nextOutData.length() * nextTargetQuality;
+				nextEfficiency = nextOutData.length() * pow(2, nextTargetQuality);
 				upperTargetQuality = currentTargetQuality;
 				upperBoundEfficiency = currentEfficiency;
 				upperBoundOutData = currentOutData;
@@ -349,12 +355,14 @@ int main(int argc, char** argv) {
 			}
 			else if (lowerBoundEfficiency > currentEfficiency && currentEfficiency < upperBoundEfficiency) {
 					nextTargetQuality = (lowTargetQuality + currentTargetQuality) / 2;
+					fprintf(stderr, "Searching at Quality: ");
+					fprintf(stderr, "%g\n", nextTargetQuality);
 					params.butteraugli_target = nextTargetQuality;
 					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 						fprintf(stderr, "Guetzli processing failed\n");
 						return 1;
 					}
-					nextEfficiency = nextOutData.length() * nextTargetQuality;
+					nextEfficiency = nextOutData.length() * pow(2, nextTargetQuality);
 					if (nextEfficiency < currentEfficiency) {
 						upperTargetQuality = currentTargetQuality;
 						upperBoundEfficiency = currentEfficiency;
@@ -364,16 +372,20 @@ int main(int argc, char** argv) {
 						currentOutData = nextOutData;
 					}
 					else {
+					fprintf(stderr, "Current Optimal Quality: ");
+					fprintf(stderr, "%g\n", currentTargetQuality);
 					lowTargetQuality = nextTargetQuality;
 					lowerBoundEfficiency = nextEfficiency;
 					lowerBoundOutData = nextOutData;
 					nextTargetQuality = (currentTargetQuality + upperTargetQuality) / 2;
+					fprintf(stderr, "Searching at Quality: ");
+					fprintf(stderr, "%g\n", nextTargetQuality);
 					params.butteraugli_target = nextTargetQuality;
 					if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 						fprintf(stderr, "Guetzli processing failed\n");
 						return 1;
 					}
-					nextEfficiency = nextOutData.length() * nextTargetQuality;
+					nextEfficiency = nextOutData.length() * pow(2, nextTargetQuality);
 					if (nextEfficiency < currentEfficiency) {
 						lowTargetQuality = currentTargetQuality;
 						lowerBoundEfficiency = currentEfficiency;
@@ -390,22 +402,28 @@ int main(int argc, char** argv) {
 				}
 			}
 			else {
-				nextTargetQuality = upperTargetQuality + (float).5;
+				nextTargetQuality = (currentTargetQuality + upperTargetQuality) / 2;
+				fprintf(stderr, "Searching at Quality: ");
+				fprintf(stderr, "%g\n", nextTargetQuality);
 				params.butteraugli_target = nextTargetQuality;
 				if (!guetzli::Process(params, &stats, rgb, xsize, ysize, &nextOutData)) {
 					fprintf(stderr, "Guetzli processing failed\n");
 					return 1;
 				}
-				nextEfficiency = nextOutData.length() * nextTargetQuality;
-				lowTargetQuality = currentTargetQuality;
-				lowerBoundEfficiency = currentEfficiency;
-				lowerBoundOutData = currentOutData;
-				currentTargetQuality = upperTargetQuality;
-				currentEfficiency = upperBoundEfficiency;
-				currentOutData = upperBoundOutData;
-				upperTargetQuality = nextTargetQuality;
-				upperBoundEfficiency = nextEfficiency;
-				upperBoundOutData = nextOutData;
+				nextEfficiency = nextOutData.length() * pow(2, nextTargetQuality);
+				if (nextEfficiency < currentEfficiency) {
+					lowTargetQuality = currentTargetQuality;
+					lowerBoundEfficiency = currentEfficiency;
+					lowerBoundOutData = currentOutData;
+					currentTargetQuality = nextTargetQuality;
+					currentEfficiency = nextEfficiency;
+					currentOutData = nextOutData;
+				}
+				else {
+					upperTargetQuality = nextTargetQuality;
+					upperBoundEfficiency = nextEfficiency;
+					upperBoundOutData = nextOutData;
+				}
 			}
 			fprintf(stderr, "Current Optimal Quality: ");
 			fprintf(stderr,"%g\n", currentTargetQuality);
