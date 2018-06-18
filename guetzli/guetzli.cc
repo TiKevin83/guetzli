@@ -222,10 +222,10 @@ void Usage() {
       "Flags:\n"
       "  --verbose    - Print a verbose trace of all attempts to standard output.\n"
       "  --quality Q  - Visual quality to aim for, expressed as a JPEG quality value.\n"
-      "                 Default value is %g.\n"
+      "                 Default does a bisect search for optimal quality.\n"
       "  --memlimit M - Memory limit in MB. Guetzli will fail if unable to stay under\n"
       "                 the limit. Default limit is %d MB.\n"
-      "  --nomemlimit - Do not limit memory usage.\n", defaultButteraugliDistance, kDefaultMemlimitMB);
+      "  --nomemlimit - Do not limit memory usage.\n", kDefaultMemlimitMB);
   exit(1);
 }
 
